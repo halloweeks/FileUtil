@@ -7,117 +7,144 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
-#include <string> // Add this line for the std::string usage
+#include <string>
+#include <openssl/evp.h>
+#include <openssl/evp.h>
+#include <openssl/md5.h>
+#include <openssl/sha.h>
 
 class FileUtil {
-private:
-    int fileDescriptor; // File descriptor for the open file
-
-    // Private helper function to convert mode string to integer
-    int convertModeString(const char*);
-
-public:
-    // Default constructor
-    FileUtil();
-
-    // Constructor with filename and mode arguments
-    FileUtil(const char*, const char*);
-
-    // Destructor
-    ~FileUtil();
-
-    // Open the file with the specified filename and mode
-    bool open(const char*, const char*);
-
-    // Check if the file is open
-    bool isOpen();
-
-    // Read data from the file into the provided buffer
-    ssize_t read(void*, size_t);
-    
-    // Read an int8_t value from the file
-    int8_t read_int8();
-
-    // Read a uint8_t value from the file
-    uint8_t read_uint8();
-
-    // Read an int32_t value from the file
-    int32_t read_int32();
-
-    // Read a uint32_t value from the file
-    uint32_t read_uint32();
-
-    // Read a bool value from the file
-    bool read_bool();
-
-    // Read an int64_t value from the file
-    int64_t read_int64();
-
-    // Read a uint64_t value from the file
-    uint64_t read_uint64();
-    
-    // Read a string from the file
-    std::string read_string();
-    
-    // Write data to the file
-    ssize_t write(const void*, size_t);
-
-    // Get the current file offset
-    off_t tell();
-    
-    bool skip(size_t bytes);
-    
-    off_t seek(off_t, int);
-
-    // Check if the file with the specified filename exists
-    bool exist(const char*);
-
-    // Get the file permissions of the specified file
-    mode_t perm(const char*);
-
-    // Get the size of the specified file
-    off_t getSize(const char*);
-
-    // Check if the file is readable
-    bool isReadable(const char*);
-
-    // Check if the file is writable
-    bool isWritable(const char*);
-
-    // Check if the file is executable
-    bool isExecutable(const char*);
-
-    // Close the file
-    void close();
+	private: 
+		int fileDescriptor;
+		int convertModeString(const char*);
+		char* filename = nullptr;
+		
+	public:
+		FileUtil();
+		FileUtil(const char*);
+		FileUtil(const char*, const char*);
+		~FileUtil();
+		bool open(const char*, const char*);
+		bool createDirectory(const std::string&);
+		bool isOpen();
+		ssize_t read(void*, size_t);
+		ssize_t data(void* buffer);
+		explicit operator bool() const;
+		int8_t read_int8();
+		uint8_t read_uint8();
+		int32_t read_int32();
+		uint32_t read_uint32();
+		bool read_bool();
+		int64_t read_int64();
+		uint64_t read_uint64();
+		std::string read_string();
+		ssize_t write(const void*, size_t);
+		off_t tell();
+		bool sha1(uint8_t hash[SHA_DIGEST_LENGTH]);
+        bool sha2(uint8_t hash[SHA256_DIGEST_LENGTH]);
+        bool md5(uint8_t hash[MD5_DIGEST_LENGTH]);
+        bool aes_128_ecb_process(const char*, uint8_t*, bool);
+		bool skip(size_t bytes);
+		const char *getFilename();
+		off_t seek(off_t, int);
+		bool exist(const char*);
+		bool exist();
+		mode_t perm(const char*);
+		off_t getSize(const char*);
+		off_t size();
+		bool isReadable(const char*);
+		bool isWritable(const char*);
+		bool isExecutable(const char*);
+		void close();
 };
 
-// Default constructor
-FileUtil::FileUtil() : fileDescriptor(-1) {}
+FileUtil::FileUtil() : fileDescriptor(-1) {
+	OpenSSL_add_all_algorithms();
+}
 
-// Constructor with filename and mode arguments
+FileUtil::FileUtil(const char *filename) {
+	OpenSSL_add_all_algorithms();
+	fileDescriptor = -1;
+	
+	if (!filename || *filename == '\0') {
+		std::cerr << "Error: Invalid filename.\n";
+		return;
+	}
+	
+	this->filename = (char*)malloc(strlen(filename) + 1);
+	
+	if (this->filename) {
+		strcpy(this->filename, filename);
+	} else {
+		std::cerr << "Error: Memory allocation failed.\n";
+	}
+}
+
 FileUtil::FileUtil(const char* filename, const char* mode) : fileDescriptor(-1) {
+	OpenSSL_add_all_algorithms();
+	if (!filename || *filename == '\0') {
+		std::cerr << "Error: Invalid filename.\n";
+		return;
+	}
+	
+	this->filename = (char*)malloc(strlen(filename) + 1);
+	
+	if (this->filename) {
+		strcpy(this->filename, filename);
+	} else {
+		std::cerr << "Error: Memory allocation failed.\n";
+	}
     open(filename, mode);
 }
 
-// Destructor
+
+
 FileUtil::~FileUtil() {
+    if (filename && *filename != '\0') {
+        free(filename);
+        filename = nullptr;
+    }
     close();
 }
 
-// Open the file with the specified filename and mode
 bool FileUtil::open(const char* filename, const char* mode) {
+	if (!filename || *filename == '\0') {
+		std::cerr << "Error: Invalid filename.\n";
+		return 0;
+	}
+	
+	this->filename = (char*)malloc(strlen(filename) + 1);
+	
+	if (this->filename) {
+		strcpy(this->filename, filename);
+	} else {
+		std::cerr << "Error: Memory allocation failed.\n";
+	}
+    // Open the file
     fileDescriptor = ::open(filename, convertModeString(mode), S_IRUSR | S_IWUSR);
     return isOpen();
 }
 
-// Check if the file is open
+
 bool FileUtil::isOpen() {
     return fileDescriptor != -1;
 }
 
-// Read data from the file into the provided buffer
+FileUtil::operator bool() const {
+    return fileDescriptor != -1;
+}
+
 ssize_t FileUtil::read(void* buffer, size_t size) {
     return ::read(fileDescriptor, buffer, size);
+}
+
+ssize_t FileUtil::data(void* buffer) {
+    if (!isOpen()) {
+        // addErrorMessage("File not open for reading data.");
+        return -1;
+    }
+    printf("file: %lu\n", size());
+    return read(buffer, size());
 }
 
 int8_t FileUtil::read_int8() {
@@ -125,7 +152,7 @@ int8_t FileUtil::read_int8() {
     if (read(&value, sizeof(int8_t)) == sizeof(int8_t)) {
         return value;
     }
-    return 0; // You can choose an appropriate default value
+    return 0;
 }
 
 uint8_t FileUtil::read_uint8() {
@@ -133,7 +160,7 @@ uint8_t FileUtil::read_uint8() {
     if (read(&value, sizeof(uint8_t)) == sizeof(uint8_t)) {
         return value;
     }
-    return 0; // You can choose an appropriate default value
+    return 0;
 }
 
 int32_t FileUtil::read_int32() {
@@ -141,7 +168,7 @@ int32_t FileUtil::read_int32() {
     if (read(&value, sizeof(int32_t)) == sizeof(int32_t)) {
         return value;
     }
-    return 0; // You can choose an appropriate default value
+    return 0;
 }
 
 uint32_t FileUtil::read_uint32() {
@@ -149,7 +176,7 @@ uint32_t FileUtil::read_uint32() {
     if (read(&value, sizeof(uint32_t)) == sizeof(uint32_t)) {
         return value;
     }
-    return 0; // You can choose an appropriate default value
+    return 0;
 }
 
 bool FileUtil::read_bool() {
@@ -157,7 +184,7 @@ bool FileUtil::read_bool() {
     if (read(&value, sizeof(bool)) == sizeof(bool)) {
         return value;
     }
-    return false; // You can choose an appropriate default value
+    return false;
 }
 
 int64_t FileUtil::read_int64() {
@@ -165,7 +192,7 @@ int64_t FileUtil::read_int64() {
     if (read(&value, sizeof(int64_t)) == sizeof(int64_t)) {
         return value;
     }
-    return 0; // You can choose an appropriate default value
+    return 0;
 }
 
 uint64_t FileUtil::read_uint64() {
@@ -173,7 +200,7 @@ uint64_t FileUtil::read_uint64() {
     if (read(&value, sizeof(uint64_t)) == sizeof(uint64_t)) {
         return value;
     }
-    return 0; // You can choose an appropriate default value
+    return 0;
 }
 
 std::string FileUtil::read_string() {
@@ -207,6 +234,231 @@ off_t FileUtil::tell() {
     return ::lseek(fileDescriptor, 0, SEEK_CUR);
 }
 
+bool FileUtil::sha1(uint8_t hash[SHA_DIGEST_LENGTH]) {
+    if (!filename || *filename == '\0') {
+        // std::cerr << "Error: Invalid filename.\n";
+        return false;
+    }
+
+    FILE *file = fopen(filename, "rb");
+    if (!file) {
+        perror("Error opening file");
+        return false;
+    }
+
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+    if (!mdctx) {
+        perror("Error creating EVP_MD_CTX");
+        fclose(file);
+        return false;
+    }
+
+    if (!EVP_DigestInit(mdctx, EVP_sha1())) {
+        perror("Error initializing digest");
+        fclose(file);
+        EVP_MD_CTX_free(mdctx);
+        return false;
+    }
+
+    uint8_t chunk[1024 * 16];
+    size_t bytes_read;
+
+    while ((bytes_read = fread(chunk, 1, sizeof(chunk), file)) != 0) {
+        if (!EVP_DigestUpdate(mdctx, chunk, bytes_read)) {
+            perror("Error updating digest");
+            fclose(file);
+            EVP_MD_CTX_free(mdctx);
+            return false;
+        }
+    }
+
+    if (!EVP_DigestFinal(mdctx, hash, NULL)) {
+        perror("Error finalizing digest");
+        fclose(file);
+        EVP_MD_CTX_free(mdctx);
+        return false;
+    }
+
+    fclose(file);
+    EVP_MD_CTX_free(mdctx);
+
+    return true;
+}
+
+bool FileUtil::sha2(uint8_t hash[SHA256_DIGEST_LENGTH]) {
+    if (!filename || *filename == '\0') {
+        return false;
+    }
+
+    FILE *file = fopen(filename, "rb");
+    if (!file) {
+        perror("Error opening file");
+        return false;
+    }
+
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+    if (!mdctx) {
+        perror("Error creating EVP_MD_CTX");
+        fclose(file);
+        return false;
+    }
+
+    if (!EVP_DigestInit(mdctx, EVP_sha256())) {
+        perror("Error initializing digest");
+        fclose(file);
+        EVP_MD_CTX_free(mdctx);
+        return false;
+    }
+
+    uint8_t chunk[1024 * 16];
+    size_t bytes_read;
+
+    while ((bytes_read = fread(chunk, 1, sizeof(chunk), file)) != 0) {
+        if (!EVP_DigestUpdate(mdctx, chunk, bytes_read)) {
+            perror("Error updating digest");
+            fclose(file);
+            EVP_MD_CTX_free(mdctx);
+            return false;
+        }
+    }
+
+    if (!EVP_DigestFinal(mdctx, hash, NULL)) {
+        perror("Error finalizing digest");
+        fclose(file);
+        EVP_MD_CTX_free(mdctx);
+        return false;
+    }
+
+    fclose(file);
+    EVP_MD_CTX_free(mdctx);
+
+    return true;
+}
+
+bool FileUtil::md5(uint8_t hash[MD5_DIGEST_LENGTH]) {
+    if (!filename || *filename == '\0') {
+        return false;
+    }
+
+    FILE *file = fopen(filename, "rb");
+    if (!file) {
+        perror("Error opening file");
+        return false;
+    }
+
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+    if (!mdctx) {
+        perror("Error creating EVP_MD_CTX");
+        fclose(file);
+        return false;
+    }
+
+    if (!EVP_DigestInit(mdctx, EVP_md5())) {
+        perror("Error initializing digest");
+        fclose(file);
+        EVP_MD_CTX_free(mdctx);
+        return false;
+    }
+
+    uint8_t chunk[1024 * 16];
+    size_t bytes_read;
+
+    while ((bytes_read = fread(chunk, 1, sizeof(chunk), file)) != 0) {
+        if (!EVP_DigestUpdate(mdctx, chunk, bytes_read)) {
+            perror("Error updating digest");
+            fclose(file);
+            EVP_MD_CTX_free(mdctx);
+            return false;
+        }
+    }
+
+    if (!EVP_DigestFinal(mdctx, hash, NULL)) {
+        perror("Error finalizing digest");
+        fclose(file);
+        EVP_MD_CTX_free(mdctx);
+        return false;
+    }
+
+    fclose(file);
+    EVP_MD_CTX_free(mdctx);
+
+    return true;
+}
+
+bool FileUtil::aes_128_ecb_process(const char *filename, uint8_t *key, bool encrypt) {
+    OpenSSL_add_all_algorithms();
+
+    if (!this->filename || *this->filename == '\0') {
+        return false;
+    }
+
+    if (!filename || *filename == '\0') {
+        return false;
+    }
+
+    int inFile = ::open(this->filename, O_RDONLY);
+
+    if (inFile == -1) {
+        return false;
+    }
+
+    int outFile = ::open(filename, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+
+    if (outFile == -1) {
+        std::cerr << "Failed to create output file." << std::endl;
+        return false;
+    }
+
+    const EVP_CIPHER *cipher = EVP_aes_128_ecb();
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+
+    if (encrypt) {
+        EVP_EncryptInit_ex(ctx, cipher, nullptr, key, nullptr);
+    } else {
+        EVP_DecryptInit_ex(ctx, cipher, nullptr, key, nullptr);
+    }
+
+    uint8_t inBuf[1024];
+    uint8_t outBuf[1024 + EVP_MAX_BLOCK_LENGTH];
+    int bytesRead;
+    int outLen;
+
+    while ((bytesRead = ::read(inFile, inBuf, sizeof(inBuf))) > 0) {
+        if (encrypt) {
+            EVP_EncryptUpdate(ctx, outBuf, &outLen, inBuf, bytesRead);
+        } else {
+            EVP_DecryptUpdate(ctx, outBuf, &outLen, inBuf, bytesRead);
+        }
+        if (::write(outFile, outBuf, outLen) != outLen) {
+            EVP_CIPHER_CTX_free(ctx);
+            ::close(inFile);
+            ::close(outFile);
+            return false;
+        }
+    }
+
+    if (encrypt) {
+        EVP_EncryptFinal_ex(ctx, outBuf, &outLen);
+    } else {
+        EVP_DecryptFinal_ex(ctx, outBuf, &outLen);
+    }
+    
+    if (::write(outFile, outBuf, outLen) != outLen) {
+        EVP_CIPHER_CTX_free(ctx);
+        ::close(inFile);
+        ::close(outFile);
+        return false;
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+    ::close(inFile);
+    ::close(outFile);
+
+    return true;
+}
+
+
+
 bool FileUtil::skip(size_t bytes) {
     off_t currentPosition = tell();
     if (currentPosition != -1 && seek(currentPosition + bytes, SEEK_SET) != -1) {
@@ -222,6 +474,15 @@ off_t FileUtil::seek(off_t offset, int whence) {
 // Check if the file with the specified filename exists
 bool FileUtil::exist(const char* filename) {
     return access(filename, F_OK) == 0;
+}
+
+bool FileUtil::exist() {
+	if (!filename || *filename == '\0') {
+		// std::cerr << "Error: Invalid filename.\n";
+		return false;
+	}
+	
+	return access(filename, F_OK) == 0;
 }
 
 // Get the file permissions of the specified file
@@ -240,6 +501,14 @@ off_t FileUtil::getSize(const char* filename) {
         return fileStat.st_size;
     }
     return -1;
+}
+
+off_t FileUtil::size() {
+	struct stat fileStat;
+	if (stat(filename, &fileStat) == 0) {
+		return fileStat.st_size;
+	}
+	return -1;
 }
 
 // Check if the file is readable
