@@ -79,13 +79,10 @@ Refer to the class declaration in "FileUtil.hpp" for more detailed information o
 #include "FileUtil.hpp"
 
 int main() {
-    const char* filename = "example.txt";
-    const char* mode = "w";
+    FileUtil file("test.txt", "w");  // Open the file
 
-    FileUtil file(filename, mode);  // Open the file
-
-    if (file.isOpen()) {
-        uint8_t data[] = {72, 101, 108, 108, 111, 44, 32, 87, 111, 114, 108, 100, 33};
+    if (file.is_open()) {
+        uint8_t data[] = "halloweeks";
         size_t dataSize = sizeof(data);
 
         ssize_t bytesWritten = file.write(data, dataSize);
